@@ -1,0 +1,90 @@
+---
+title: "Practical Machine Learning - Course Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. This report uses data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of this project is to predict the manner in which they did the exercise.
+
+#Load and clean data, and partition data into testing and training sets
+```{r}
+setwd("C:/Users/algo/Desktop/Coursera/Machine Learning")
+library(caret); library(ggplot2); library(rattle) ; library(rpart); library(rpart.plot); library(randomForest)
+training <- read.csv("pml-training.csv", header = TRUE)
+testing <- read.csv("pml-testing.csv", header = TRUE)
+```
+
+First, training and testing datasets are created by subsetting the training dataset loaded above.  The original testing set, loaded above and containing just 20 observations, will be set aside until the end.  
+
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.6, list = FALSE)
+trainSet <- training[inTrain,] ; testSet <- training[-inTrain,]
+dim(trainSet); dim(testSet)
+```
+
+A quick scan of the data shows that there are a number of variables where the majority of observations are N/A.  We filter out those columns where more than half of the observations are unavailable.
+
+```{r}
+naCols <- sapply(trainSet, function(x) mean(is.na(x))) > 0.5
+trainSet <- trainSet[,naCols==F]
+testSet <- testSet[,naCols==F]
+dim(trainSet); dim(testSet)
+```
+
+Next, we look to see if there are any variables with near-zero variance that should be excluded from our model.  We also exclude variables identifying participants and time stamps.
+
+```{r}
+nzv <- nearZeroVar(trainSet)
+trainSet <- trainSet[,-nzv]; testSet <- testSet[,-nzv]
+trainSet <- trainSet[,-(1:5)]; testSet <- testSet[,-(1:5)]
+dim(trainSet); dim(testSet)
+```
+
+#Model Building
+Initially, we build a CART model using the RPart method in the Caret Package, using all variables, and plot the results using the Rattle package.  
+
+```{r}
+modFit1 <- train(classe ~ ., method = "rpart", data = trainSet)
+fancyRpartPlot(modFit1$finalModel)
+```
+
+We then take the model and apply it to the test dataset and create a confusion matrix to determine the accuracy
+
+```{r}
+predict1 <- predict(modFit1, newdata = testSet)
+confusionMatrix(testSet$classe, predict1)
+```
+
+With less than 50% accuracy, this model provides no predictive power in determining classe.  Next, we build a random forest model, apply it to the test dataset, and create a new confusion matrix
+
+```{r}
+control <- trainControl(method = "cv", number = 3)
+modFitrf <- train(classe ~ ., method = "rf", ntree=100, trControl=control, data = trainSet)
+predictrf <- predict(modFitrf, newdata = testSet)
+confusionMatrix(testSet$classe, predictrf)
+
+```
+
+The random forest model proves to be much more accurate, predicting the classe in the test set 99.6% of the time (the out-of-sample error being 0.4%).  The in-sample error, shown below, is 0%.
+
+```{r}
+confusionMatrix(trainSet$classe, predict(modFitrf, newdata = trainSet))
+```
+
+The random forests model is clearly more accurate and is used to predict the classe values of the original test set.  
+
+```{r}
+predict(modFitrf, newdata = testing)
+```
+
+#Conclusion
+A random forest model was able to accurately predict the outcome with very little out-of-sample error and 100% accuracy when applied to the original test set.
+
+
+
+
+
